@@ -35,8 +35,10 @@ Gold (consolidation FHIR)
         │
         ▼
 data/gold/patients_fhir/
+```
 
-Structure du projet
+## Structure du projet
+
 projet/
 ├── build.sbt
 ├── src/
