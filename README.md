@@ -38,7 +38,7 @@ data/gold/patients_fhir/
 ```
 
 ## Structure du projet
-
+```text
 projet/
 ├── build.sbt
 ├── src/
@@ -59,6 +59,8 @@ projet/
 │       └── patients_fhir/
 ├── README.md
 └── NOTES.md
+```
+
 Prérequis
 Java 17
 Apache Spark 3.5.x
