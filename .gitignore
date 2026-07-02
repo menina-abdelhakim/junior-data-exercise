@@ -1,0 +1,31 @@
+# SBT
+target/
+project/target/
+project/project/
+project/.ivy/
+.idea/
+*.iml
+.bsp/
+.bloop/
+.metals/
+.vscode/
+
+# Données générées par le pipeline
+data/
+output/
+
+# Fichiers temporaires
+*.lock
+*.tmp
+~*
+*#
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Spark checkpoint (éventuel)
+checkpoint/
