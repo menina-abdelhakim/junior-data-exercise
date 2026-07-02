@@ -61,52 +61,80 @@ projet/
 └── NOTES.md
 ```
 
-Prérequis
-Java 17
-Apache Spark 3.5.x
-Scala 2.12
-sbt
-Linux (Debian 12 dans l'environnement de développement)
-Installation
-Cloner le projet.
-Déposer les fichiers CSV dans resources/.
-Vérifier l'installation de Java, Spark et sbt.
-Compilation
+## Prérequis
+
+* Java 17
+* Apache Spark 3.5.x
+* Scala 2.12
+* sbt
+* Linux (Debian 12 dans l'environnement de développement)
+
+## Installation
+
+1. Cloner le projet.
+2. Déposer les fichiers CSV dans `resources/`.
+3. Vérifier l'installation de Java, Spark et sbt.
+
+## Compilation
+
+```bash
 sbt clean compile package
+```
 
 Le JAR est généré dans :
 
+```text
 target/scala-2.12/
-Exécution
-Bronze
+```
+
+## Exécution
+
+### Bronze
+
+```bash
 spark-submit \
   --class BronzeLayer \
   --master local[*] \
   target/scala-2.12/projet.jar
-Silver
+```
+
+### Silver
+
+```bash
 spark-submit \
   --class SilverLayer \
   --master local[*] \
   target/scala-2.12/projet.jar
-Gold
+```
+
+### Gold
+
+```bash
 spark-submit \
   --class GoldLayer \
   --master local[*] \
   target/scala-2.12/projet.jar
-Résultat final
+```
+
+## Résultat final
 
 Le résultat est écrit dans :
 
+```text
 data/gold/patients_fhir/
+```
 
 Format :
 
+```text
 JSON Lines
+```
 
 Chaque ligne contient une ressource Patient FHIR R4 complète.
 
-Exemple :
+### Exemple
 
+```json
 {
   "resourceType": "Patient",
   "id": "800000123",
@@ -145,162 +173,204 @@ Exemple :
     }
   ]
 }
-Validation FHIR
+```
+
+## Validation FHIR
 
 Les ressources générées ont été validées avec HAPI FHIR R4.
 
 Les contraintes suivantes sont respectées :
 
-resourceType obligatoire
-id présent
-identifier conforme
-name officiel présent
-gender conforme à FHIR
-birthDate normalisée
-address structurée
-text.div XHTML valide
-URLs d'extensions non réservées
+* `resourceType` obligatoire
+* `id` présent
+* `identifier` conforme
+* `name` officiel présent
+* `gender` conforme à FHIR
+* `birthDate` normalisée
+* `address` structurée
+* `text.div` XHTML valide
+* URLs d'extensions non réservées
 
 Aucune erreur bloquante n'est remontée par le validateur.
 
-Couche Bronze
-Traitements réalisés
+## Couche Bronze
+
+### Traitements réalisés
+
 Lecture des CSV avec :
+
+```scala
 .option("header", true)
 .option("multiLine", true)
 .option("escape", "\"")
-Suppression des colonnes techniques _c0, _c1, etc.
-Écriture en Parquet.
-Conservation intégrale des données sources.
-Couche Silver
-Normalisation des dates
+```
+
+* Suppression des colonnes techniques `_c0`, `_c1`, etc.
+* Écriture en Parquet.
+* Conservation intégrale des données sources.
+
+## Couche Silver
+
+### Normalisation des dates
 
 Transformation de plusieurs formats vers :
 
+```text
 yyyy-MM-dd
-Normalisation du sexe
-Valeur source	Valeur Silver
-H	H
-Homme	H
-Male	H
-F	F
-Femme	F
-Female	F
-Autre	null
-Prénoms
-Suppression des crochets et guillemets
-Découpage des prénoms multiples
-Capitalisation
-Déduplication
-Opposition
-Valeur source	Valeur Silver
-O	O
-Oui	O
-true	O
-1	O
-N	N
-Non	N
-false	N
-0	N
-Couche Gold
-Résolution des IPP
+```
 
-La table identifiants_ipp constitue la référence principale.
+### Normalisation du sexe
+
+| Valeur source | Valeur Silver |
+| ------------- | ------------- |
+| H             | H             |
+| Homme         | H             |
+| Male          | H             |
+| F             | F             |
+| Femme         | F             |
+| Female        | F             |
+| Autre         | null          |
+
+### Prénoms
+
+* Suppression des crochets et guillemets
+* Découpage des prénoms multiples
+* Capitalisation
+* Déduplication
+
+### Opposition
+
+| Valeur source | Valeur Silver |
+| ------------- | ------------- |
+| O             | O             |
+| Oui           | O             |
+| true          | O             |
+| 1             | O             |
+| N             | N             |
+| Non           | N             |
+| false         | N             |
+| 0             | N             |
+
+## Couche Gold
+
+### Résolution des IPP
+
+La table `identifiants_ipp` constitue la référence principale.
 
 Règles :
 
-utilisation de ipp_principal lorsqu'il existe ;
-sinon, conservation de l'IPP courant.
-Sélection du meilleur enregistrement
+* utilisation de `ipp_principal` lorsqu'il existe ;
+* sinon, conservation de l'IPP courant.
+
+### Sélection du meilleur enregistrement
 
 Priorités :
 
-IPP actif ;
-date de fin de validité la plus récente ;
-valeurs nulles considérées comme 9999-12-31.
-Adresses
-normalisation en majuscules ;
-suppression des doublons ;
-agrégation via collect_set;
-conversion en tableaux FHIR.
-Opposition
+1. IPP actif ;
+2. date de fin de validité la plus récente ;
+3. valeurs nulles considérées comme `9999-12-31`.
 
-La présence d'au moins un indicateur O rend le patient opposé.
+### Adresses
 
-Construction FHIR
+* normalisation en majuscules ;
+* suppression des doublons ;
+* agrégation via `collect_set` ;
+* conversion en tableaux FHIR.
+
+### Opposition
+
+La présence d'au moins un indicateur `O` rend le patient opposé.
+
+### Construction FHIR
 
 Les champs suivants sont produits :
 
-id
-identifier
-active
-name
-gender
-birthDate
-address
-extension
-text
-Hypothèses et arbitrages
-IPP principal
+* `id`
+* `identifier`
+* `active`
+* `name`
+* `gender`
+* `birthDate`
+* `address`
+* `extension`
+* `text`
+
+## Hypothèses et arbitrages
+
+### IPP principal
 
 La table des identifiants IPP est considérée comme la source de vérité.
 
-Patients sans nom
+### Patients sans nom
 
-Les patients sans nom_naissance sont exclus de la couche Gold.
+Les patients sans `nom_naissance` sont exclus de la couche Gold.
 
-Dates
+### Dates
 
-Toutes les dates sont converties en yyyy-MM-dd.
+Toutes les dates sont converties en :
 
-Sexe inconnu
+```text
+yyyy-MM-dd
+```
+
+### Sexe inconnu
 
 Les valeurs non reconnues deviennent :
 
+```text
 unknown
+```
 
 dans FHIR.
 
-Opposition absente
+### Opposition absente
 
 Une opposition absente est considérée comme négative.
 
-Anomalies détectées
-Anomalie	Traitement
-Dates multiples	Normalisation
-Sexe libre	Mapping H/F
-Prénoms complexes	Nettoyage et déduplication
-Adresses en double	collect_set
-Type d'adresse manquant	home par défaut
-IPP déprécié sans principal	auto-référence
-Opposition textuelle	O/N
-Pistes d'amélioration
-Ajout de tests unitaires Spark
-Contrôles qualité Bronze/Silver/Gold
-Validation FHIR automatisée dans le pipeline
-Ajout des téléphones et emails
-Gestion d'autres identifiants (NIR, INS, etc.)
-Externalisation des mappings dans des fichiers de configuration
-Optimisation des jointures Spark
-Déploiement via une API REST
-Personnalisation
+## Anomalies détectées
+
+| Anomalie                    | Traitement                 |
+| --------------------------- | -------------------------- |
+| Dates multiples             | Normalisation              |
+| Sexe libre                  | Mapping H/F                |
+| Prénoms complexes           | Nettoyage et déduplication |
+| Adresses en double          | `collect_set`              |
+| Type d'adresse manquant     | `home` par défaut          |
+| IPP déprécié sans principal | auto-référence             |
+| Opposition textuelle        | O/N                        |
+
+## Pistes d'amélioration
+
+* Ajout de tests unitaires Spark
+* Contrôles qualité Bronze/Silver/Gold
+* Validation FHIR automatisée dans le pipeline
+* Ajout des téléphones et emails
+* Gestion d'autres identifiants (NIR, INS, etc.)
+* Externalisation des mappings dans des fichiers de configuration
+* Optimisation des jointures Spark
+* Déploiement via une API REST
+
+## Personnalisation
 
 Les mappings métiers sont centralisés dans :
 
-SilverLayer.scala
-GoldLayer.scala
+* `SilverLayer.scala`
+* `GoldLayer.scala`
 
 Le format de sortie peut être changé facilement :
 
+```scala
 .write.json(...)
 .write.csv(...)
 .write.text(...)
-Licence
+```
+
+## Licence
 
 Projet fourni à des fins pédagogiques et d'évaluation technique.
 
 Libre d'adaptation et de réutilisation.
 
-Auteur : Abdelhakim MENINA
+**Auteur : Abdelhakim MENINA**
 
-Date : Juillet 2026
+**Date : Juillet 2026**
