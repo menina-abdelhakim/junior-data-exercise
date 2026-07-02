@@ -1,5 +1,27 @@
 # NOTES.md – Pipeline FHIR Patient (Bronze / Silver / Gold)
 
+# Commandes de compilation et d'exécution
+
+Compilez le projet avec sbt, puis exécutez les trois jobs Spark dans l’ordre (Bronze → Silver → Gold).
+
+```bash
+sbt clean compile package
+
+spark-submit \
+  --class BronzeLayer \
+  --master local[*] \
+  target/scala-2.12/*.jar
+
+spark-submit \
+  --class SilverLayer \
+  --master local[*] \
+  target/scala-2.12/*.jar
+
+spark-submit \
+  --class GoldLayer \
+  --master local[*] \
+  target/scala-2.12/*.jar
+```
 ## 1. Hypothèses et arbitrages
 
 ### Sources et référentiel
