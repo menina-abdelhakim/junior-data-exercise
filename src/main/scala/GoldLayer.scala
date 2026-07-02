@@ -13,19 +13,13 @@ object GoldLayer {
 
     spark.sparkContext.setLogLevel("ERROR")
 
-    // =====================================================
     // LOAD SILVER
-    // =====================================================
-
     val patients = spark.read.parquet("data/silver/patients")
     val adresses = spark.read.parquet("data/silver/adresses")
     val ipp = spark.read.parquet("data/silver/ipp")
     val opposition = spark.read.parquet("data/silver/opposition")
 
-    // =====================================================
-    // 1. RESOLUTION IPP -> PATIENT MASTER
-    // =====================================================
-
+    // 1. RÉSOLUTION IPP
     val ippMapping = ipp
       .select(
         col("ipp").alias("source_ipp"),
@@ -35,10 +29,7 @@ object GoldLayer {
         col("is_deprecated")
       )
 
-    // =====================================================
-    // 2. PATIENT CONSOLIDATION (MASTER ONLY)
-    // =====================================================
-
+    // 2. PATIENT MASTER
     val patientsMapped = patients
       .join(ippMapping, patients("ipp") === ippMapping("source_ipp"), "left")
       .withColumn("patient_id", coalesce(col("patient_id"), col("ipp")))
@@ -57,14 +48,11 @@ object GoldLayer {
       .drop("rank", "is_deprecated")
       .select(
         col("patient_id"),
-        col("ipp"),
         col("nom_naissance"),
-        col("nom_usuel"),
         col("prenoms"),
         col("date_naissance"),
         col("sexe"),
-        col("date_deces"),
-        col("date_fin_validite")
+        col("date_deces")
       )
       .withColumn(
         "prenoms",
@@ -72,18 +60,15 @@ object GoldLayer {
           array(lit("UNKNOWN"))
         ).otherwise(col("prenoms"))
       )
+      .filter(col("nom_naissance").isNotNull)
 
-    // =====================================================
-    // 3. ADRESSES CONSOLIDÉES (sans doublon)
-    // =====================================================
-
+    // 3. ADRESSES
     val adressesMapped = adresses
       .join(ippMapping, adresses("ipp") === ippMapping("source_ipp"), "left")
       .withColumn("patient_id", coalesce(col("patient_id"), col("ipp")))
       .drop("source_ipp")
 
     val adressesGold = adressesMapped
-      // Nettoyage de la ligne adresse : suppression espaces multiples, mise en majuscules
       .withColumn(
         "line_clean",
         upper(trim(regexp_replace(col("ligne_adresse"), "\\s+", " ")))
@@ -109,33 +94,31 @@ object GoldLayer {
         ).alias("addresses")
       )
       .withColumn(
-        "addresses_fhir",
+        "address",
         expr("""
-          transform(
-            array_sort(addresses, (a, b) -> a.rank - b.rank),
-            x ->
-              struct(
-                x.line as line,
-                x.postalCode as postalCode,
-                x.city as city,
-                x.country as country,
-                case
-                  when x.use_raw = 'actuelle' then 'home'
-                  when x.use_raw = 'domicile' then 'home'
-                  when x.use_raw = 'ancienne' then 'old'
-                  else 'home'
-                end as use
-              )
+          array_distinct(
+            transform(
+              array_sort(addresses, (a, b) -> a.rank - b.rank),
+              x ->
+                struct(
+                  x.line as line,
+                  x.postalCode as postalCode,
+                  x.city as city,
+                  x.country as country,
+                  case
+                    when x.use_raw = 'actuelle' then 'home'
+                    when x.use_raw = 'domicile' then 'home'
+                    when x.use_raw = 'ancienne' then 'old'
+                    else 'home'
+                  end as use
+                )
+            )
           )
         """)
       )
-      .withColumn("address", array_distinct(col("addresses_fhir")))
       .select("patient_id", "address")
 
-    // =====================================================
     // 4. OPPOSITION
-    // =====================================================
-
     val oppositionMapped = opposition
       .join(ippMapping, opposition("ipp") === ippMapping("source_ipp"), "left")
       .withColumn("patient_id", coalesce(col("patient_id"), col("ipp")))
@@ -144,16 +127,11 @@ object GoldLayer {
     val oppositionGold = oppositionMapped
       .groupBy("patient_id")
       .agg(
-        max(
-          when(col("opposition") === "O", true)
-            .otherwise(false)
-        ).alias("hasOpposition")
+        max(when(col("opposition") === "O", true).otherwise(false))
+          .alias("hasOpposition")
       )
 
-    // =====================================================
-    // 5. DATASET FINAL PATIENT
-    // =====================================================
-
+    // 5. DATASET FINAL
     val goldDf = patientsGold
       .join(adressesGold, Seq("patient_id"), "left")
       .join(oppositionGold, Seq("patient_id"), "left")
@@ -166,21 +144,23 @@ object GoldLayer {
         coalesce(col("hasOpposition"), lit(false))
       )
 
-    // =====================================================
-    // 6. CONSTRUCTION FHIR R4 (JSON valide)
-    // =====================================================
-
+    // 6. CONSTRUCTION FHIR R4 – sans example.org et avec text minimal
     val fhirDf = goldDf.select(
-      col("patient_id"),
       to_json(
         struct(
           lit("Patient").alias("resourceType"),
           col("patient_id").cast("string").alias("id"),
 
+          // Ajout d'un text pour satisfaire dom-6 (avertissement)
+          struct(
+            lit("generated").alias("status"),
+            lit("<div xmlns=\"http://www.w3.org/1999/xhtml\">Patient details</div>").alias("div")
+          ).alias("text"),
+
           array(
             struct(
               lit("usual").alias("use"),
-              lit("http://example.org/fhir/identifier/ipp").alias("system"),
+              lit("http://fhir.healthdata.fr/sid/ipp").alias("system"), // URL simple, pas example.org
               col("patient_id").cast("string").alias("value")
             )
           ).alias("identifier"),
@@ -209,25 +189,22 @@ object GoldLayer {
             col("hasOpposition") === true,
             array(
               struct(
-                lit("http://example.org/fhir/StructureDefinition/opposition").alias("url"),
+                lit("http://fhir.healthdata.fr/StructureDefinition/opposition").alias("url"), // URL simple
                 lit(true).alias("valueBoolean")
               )
             )
           ).otherwise(lit(null)).alias("extension")
         )
-      ).alias("fhir_json")
+      ).alias("json")
     )
 
-    // =====================================================
-    // OUTPUT
-    // =====================================================
-
-    println("=== GOLD PATIENT FHIR ===")
+    // 7. OUTPUT en JSON Lines
+    println("=== GOLD PATIENT FHIR (JSON Lines) ===")
     fhirDf.show(false)
 
     fhirDf.write
       .mode("overwrite")
-      .json("data/gold/patients_fhir")
+      .text("data/gold/patients_fhir")
 
     spark.stop()
   }

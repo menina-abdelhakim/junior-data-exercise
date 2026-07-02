@@ -89,7 +89,6 @@ object SilverLayer {
           )
         """)
       )
-      // On ne drop pas les doublons ici : on les garde pour la Gold
 
     // =====================================================
     // ADRESSES
@@ -101,8 +100,6 @@ object SilverLayer {
       .withColumn("pays", upper(trim(col("pays"))))
       .withColumn("date_debut", normalizeDate(col("date_debut")))
       .withColumn("date_fin", normalizeDate(col("date_fin")))
-      // On garde le type_adresse tel quel
-      // On ne drop pas les doublons ici
 
     // =====================================================
     // IPP
@@ -155,7 +152,6 @@ object SilverLayer {
           )
           .otherwise(null)
       )
-      // On ne drop pas les doublons
 
     // =====================================================
     // OUTPUT

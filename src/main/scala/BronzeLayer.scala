@@ -24,50 +24,42 @@ object BronzeLayer {
     // PATIENTS
     // =====================================================
     val patientsBronze = removeExtraColumns(
-
       spark.read
         .option("header", "true")
         .option("multiLine", "true")
         .option("escape", "\"")
         .option("mode", "PERMISSIVE")
         .csv("resources/patients.csv")
-
     )
 
     // =====================================================
     // ADRESSES
     // =====================================================
     val adressesBronze = removeExtraColumns(
-
       spark.read
         .option("header", "true")
         .option("mode", "PERMISSIVE")
         .csv("resources/adresses.csv")
-
     )
 
     // =====================================================
     // IPP
     // =====================================================
     val ippBronze = removeExtraColumns(
-
       spark.read
         .option("header", "true")
         .option("mode", "PERMISSIVE")
         .csv("resources/identifiants_ipp.csv")
-
     )
 
     // =====================================================
     // OPPOSITION
     // =====================================================
     val oppositionBronze = removeExtraColumns(
-
       spark.read
         .option("header", "true")
         .option("mode", "PERMISSIVE")
         .csv("resources/opposition_recherche.csv")
-
     )
 
     // =====================================================
